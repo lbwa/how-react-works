@@ -1,0 +1,50 @@
+{
+  "name": "how-react-works",
+  "version": "0.1.0",
+  "description": "How react works",
+  "main": "index.js",
+  "scripts": {
+    "watch": "tsc --watch -p tsconfig.json",
+    "compile": "tsc -p tsconfig.json",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/lbwa/how-react-works.git"
+  },
+  "keywords": [
+    "react.js"
+  ],
+  "author": "Bowen Liu <asyncmode@outlook.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/lbwa/how-react-works/issues"
+  },
+  "homepage": "https://github.com/lbwa/how-react-works#readme",
+  "dependencies": {
+    "typescript": "^4.0.2"
+  },
+  "devDependencies": {
+    "husky": "^4.3.0",
+    "lint-staged": "^10.3.0",
+    "prettier": "^2.1.1"
+  },
+  "prettier": {
+    "endOfLine": "lf",
+    "printWidth": 80,
+    "semi": false,
+    "singleQuote": true,
+    "trailingComma": "none",
+    "tabWidth": 2
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "packages/**/*.{js,jsx,ts,tsx,json,css,scss,sass,md}": [
+      "prettier --write"
+    ]
+  }
+}
