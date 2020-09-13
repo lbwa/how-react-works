@@ -64,6 +64,31 @@ function render(element: React.Element, container: HTMLElement | Text) {
   container.appendChild(dom)
 }
 
+// Concurrent mode
+
+let nextUnitOfWork = null
+
+function workLoop(deadline: RequestIdleCallbackDeadline) {
+  let shouldYield = false
+  while (nextUnitOfWork && !shouldYield) {
+    nextUnitOfWork = performUnitWork(nextUnitOfWork)
+    shouldYield = deadline.timeRemaining() < 1
+  }
+  // The browser will run the callback when the main thread is idle.
+  /**
+   * React doesn't use requestIdleCallback anymore. Now it uses the `scheduler` package. But for this use case it's conceptually the same.
+   * @see https://github.com/facebook/react/issues/11171#issuecomment-417349573
+   * @see https://github.com/facebook/react/tree/master/packages/scheduler
+   */
+  requestIdleCallback(workLoop)
+}
+
+function performUnitWork(nextUnitOfWork) {}
+
+// Concurrent mode end
+
+// export
+
 class React {
   static createElement = createElement
   static render = render
