@@ -7,13 +7,20 @@ declare module React {
 
 interface Fiber {
   type: string
-  // parent fiber
+  /**
+   * parent fiber
+   */
   return: Fiber | null
   // singly linked list tree structure
   child: Fiber | null
   sibling: Fiber | null
   props: Record<string, any> & Record<'children', React.Element[]>
   dom: HTMLElement | null
+  /**
+   * a link to the old fiber, the fiber that we committed to the DOM in the
+   * previous commit phase.
+   */
+  alternate: Fiber | null
 }
 
 function isObject(val: unknown): val is object {
@@ -77,7 +84,8 @@ function render(element: React.Element, container: HTMLElement) {
     dom: container,
     props: {
       children: [element]
-    }
+    },
+    alternate: currentRoot
   }
 }
 
@@ -89,8 +97,19 @@ let nextUnitOfWork: Fiber | null = null
  * the browser could interrupt(due to requestIdleCallback) our work before we
  * finish rendering the whole tree. In that case, the user will see an
  * incomplete UI. And we don't want that.
+ *
+ * Instead, we'll keep track of the root of the fiber tree. We call it the work
+ * in progress root. And once we finish all the work(we know it because there
+ * isn't a next unit of work) we commit the whole fiber tree to the DOM
  */
 let workInProgressRoot: Fiber | null = null
+/**
+ * For updating or deleting nodes, we need to compare the elements we receive
+ * on the render function to the last fiber tree we committed to the DOM, so we
+ * keep a reference to that `last fiber tree we committed to the DOM` after we
+ * finish the commit. We call it currentRoot
+ */
+let currentRoot: Fiber | null = null
 
 function workLoop(deadline: RequestIdleCallbackDeadline) {
   let shouldYield = false
@@ -138,7 +157,8 @@ function performUnitWork(fiber: Fiber): Fiber | null {
       return: fiber,
       child: null,
       sibling: null,
-      dom: null
+      dom: null,
+      alternate: null
     }
 
     // we add it to the fiber tree setting it either as a child or as a
@@ -170,6 +190,9 @@ function performUnitWork(fiber: Fiber): Fiber | null {
 
 // render and commit phases
 
+/**
+ * recursively append all the nodes to the dom
+ */
 function commitFiberRoot() {
   // add nodes to dom
   if (!workInProgressRoot) {
