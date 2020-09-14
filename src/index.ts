@@ -2,8 +2,18 @@ declare module React {
   interface Element<P = any> {
     type: string
     props: P
-    key?: number | string | null
   }
+}
+
+interface Fiber {
+  type: string
+  // parent fiber
+  return: Fiber | null
+  // singly linked list tree structure
+  child: Fiber | null
+  sibling: Fiber | null
+  props: Record<string, any> & Record<'children', React.Element[]>
+  dom: HTMLElement | null
 }
 
 function isObject(val: unknown): val is object {
@@ -41,32 +51,39 @@ function createTextElement(text: string | number | boolean) {
   }
 }
 
-function render(element: React.Element, container: HTMLElement | Text) {
+// Fiber
+
+function createDom(fiber: Fiber) {
   const dom =
-    element.type === `TEXT_ELEMENT`
-      ? // create a text node when the element type is `TEXT_ELEMENT`
-        document.createTextNode('')
-      : // create a regular dom node
-        document.createElement(element.type)
+    fiber.type === 'TEXT_ELEMENT'
+      ? document.createTextNode('')
+      : document.createElement(fiber.type)
 
-  // assign all DOM properties to real DOM node
-  const isProperty = (key: string) => key !== 'children'
-  Object.keys(element.props)
-    .filter(isProperty)
-    .forEach(
-      (name) =>
-        ((dom as any)[name] = element.props[name]) /* TODO: letter case */
-    )
+  const isDomProperty = (key: string) => key !== 'children'
+  Object.keys(fiber.props)
+    .filter(isDomProperty)
+    .forEach((prop) => ((dom as any)[prop] = fiber.props[prop]))
 
-  // recursively do the same for each child
-  element.props.children.forEach((child: React.Element) => render(child, dom))
+  return dom as HTMLElement
+}
 
-  container.appendChild(dom)
+// In the render function we set nextUnitOfWork to the root of the fiber tree
+function render(element: React.Element, container: HTMLElement) {
+  nextUnitOfWork = {
+    type: '',
+    return: null,
+    child: null,
+    sibling: null,
+    dom: container,
+    props: {
+      children: [element]
+    }
+  }
 }
 
 // Concurrent mode
 
-let nextUnitOfWork = null
+let nextUnitOfWork: Fiber | null = null
 
 function workLoop(deadline: RequestIdleCallbackDeadline) {
   let shouldYield = false
@@ -83,7 +100,62 @@ function workLoop(deadline: RequestIdleCallbackDeadline) {
   requestIdleCallback(workLoop)
 }
 
-function performUnitWork(nextUnitOfWork) {}
+// when the browser is ready, it will call our workLoop and we'll start working
+// on the root
+requestIdleCallback(workLoop)
+
+function performUnitWork(fiber: Fiber): Fiber | null {
+  // add dom node, we keep track of the DOM node in the fiber.dom property
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber)
+  }
+  if (fiber.return) {
+    fiber.return.dom?.appendChild(fiber.dom)
+  }
+
+  // for each child we create a new fiber(transform elements to fibers)
+  const elements = fiber.props.children
+  let index = 0
+  let prevSibling: Fiber | null = null
+
+  while (index < elements.length) {
+    const element = elements[index]
+
+    const newFiber: Fiber = {
+      type: element.type,
+      props: element.props,
+      return: fiber,
+      child: null,
+      sibling: null,
+      dom: null
+    }
+
+    // we add it to the fiber tree setting it either as a child or as a
+    // sibling, depending on whether it's the first child or not.
+    if (index === 0) {
+      fiber.child = newFiber
+    } else {
+      prevSibling!.sibling = newFiber
+    }
+    prevSibling = newFiber
+    index++
+  }
+
+  // return next unit of work
+  // finally we search for the next unit of work. We first try with the child,
+  // then with the sibling, then with the uncle, and so on.
+  if (fiber.child) {
+    return fiber.child
+  }
+  let nextFiber: Fiber | null = fiber
+  while (nextFiber) {
+    if (nextFiber.sibling) {
+      return nextFiber.sibling
+    }
+    nextFiber = nextFiber.return
+  }
+  return null
+}
 
 // Concurrent mode end
 
