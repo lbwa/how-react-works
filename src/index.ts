@@ -69,7 +69,7 @@ function createDom(fiber: Fiber) {
 
 // In the render function we set nextUnitOfWork to the root of the fiber tree
 function render(element: React.Element, container: HTMLElement) {
-  nextUnitOfWork = {
+  workInProgressRoot = nextUnitOfWork = {
     type: '',
     return: null,
     child: null,
@@ -84,6 +84,13 @@ function render(element: React.Element, container: HTMLElement) {
 // Concurrent mode
 
 let nextUnitOfWork: Fiber | null = null
+/**
+ * Why should we need a workInProgress root?
+ * the browser could interrupt(due to requestIdleCallback) our work before we
+ * finish rendering the whole tree. In that case, the user will see an
+ * incomplete UI. And we don't want that.
+ */
+let workInProgressRoot: Fiber | null = null
 
 function workLoop(deadline: RequestIdleCallbackDeadline) {
   let shouldYield = false
@@ -91,6 +98,13 @@ function workLoop(deadline: RequestIdleCallbackDeadline) {
     nextUnitOfWork = performUnitWork(nextUnitOfWork)
     shouldYield = deadline.timeRemaining() < 1
   }
+
+  // Once we finish all the work(we know it because there isn't a next unit of
+  // work) we commit the whole fiber tree to the DOM.
+  if (!nextUnitOfWork && workInProgressRoot) {
+    commitFiberRoot()
+  }
+
   // The browser will run the callback when the main thread is idle.
   /**
    * React doesn't use requestIdleCallback anymore. Now it uses the `scheduler` package. But for this use case it's conceptually the same.
@@ -108,9 +122,6 @@ function performUnitWork(fiber: Fiber): Fiber | null {
   // add dom node, we keep track of the DOM node in the fiber.dom property
   if (!fiber.dom) {
     fiber.dom = createDom(fiber)
-  }
-  if (fiber.return) {
-    fiber.return.dom?.appendChild(fiber.dom)
   }
 
   // for each child we create a new fiber(transform elements to fibers)
@@ -157,7 +168,26 @@ function performUnitWork(fiber: Fiber): Fiber | null {
   return null
 }
 
-// Concurrent mode end
+// render and commit phases
+
+function commitFiberRoot() {
+  // add nodes to dom
+  if (!workInProgressRoot) {
+    return
+  }
+  commitWork(workInProgressRoot.child)
+  workInProgressRoot = null
+}
+
+function commitWork(fiber: Fiber | null) {
+  if (!fiber) {
+    return
+  }
+  const domParent = fiber.return?.dom
+  domParent?.appendChild(fiber.dom!)
+  commitWork(fiber.child)
+  commitWork(fiber.sibling)
+}
 
 // export
 
