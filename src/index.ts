@@ -21,6 +21,13 @@ interface Fiber {
    * previous commit phase.
    */
   alternate: Fiber | null
+  effectTag?: EffectTag
+}
+
+enum EffectTag {
+  UPDATE,
+  PLACEMENT,
+  DELETION
 }
 
 function isObject(val: unknown): val is object {
@@ -87,6 +94,7 @@ function render(element: React.Element, container: HTMLElement) {
     },
     alternate: currentRoot
   }
+  deletions = []
 }
 
 // Concurrent mode
@@ -110,6 +118,7 @@ let workInProgressRoot: Fiber | null = null
  * finish the commit. We call it currentRoot
  */
 let currentRoot: Fiber | null = null
+let deletions: Fiber[] = []
 
 function workLoop(deadline: RequestIdleCallbackDeadline) {
   let shouldYield = false
@@ -145,32 +154,7 @@ function performUnitWork(fiber: Fiber): Fiber | null {
 
   // for each child we create a new fiber(transform elements to fibers)
   const elements = fiber.props.children
-  let index = 0
-  let prevSibling: Fiber | null = null
-
-  while (index < elements.length) {
-    const element = elements[index]
-
-    const newFiber: Fiber = {
-      type: element.type,
-      props: element.props,
-      return: fiber,
-      child: null,
-      sibling: null,
-      dom: null,
-      alternate: null
-    }
-
-    // we add it to the fiber tree setting it either as a child or as a
-    // sibling, depending on whether it's the first child or not.
-    if (index === 0) {
-      fiber.child = newFiber
-    } else {
-      prevSibling!.sibling = newFiber
-    }
-    prevSibling = newFiber
-    index++
-  }
+  reconcileChildren(fiber, elements)
 
   // return next unit of work
   // finally we search for the next unit of work. We first try with the child,
@@ -188,7 +172,144 @@ function performUnitWork(fiber: Fiber): Fiber | null {
   return null
 }
 
+/**
+ * reconcile the old fibers with the new elements
+ * @param fiber the odl fibers
+ * @param elements the new elements
+ */
+function reconcileChildren(
+  workInProgressFiber: Fiber,
+  elements: React.Element[]
+) {
+  let index = 0
+  /**
+   * The oldFiber is what we rendered the last time
+   */
+  let oldFiber =
+    workInProgressFiber.alternate && workInProgressFiber.alternate.child
+  let prevSibling: Fiber | null = null
+
+  while (index < elements.length || oldFiber !== null) {
+    /**
+     * The element is the thing we want to render to the DOM
+     */
+    const element = elements[index]
+    const sameType = oldFiber && element && element.type === oldFiber.type
+    let newFiber: Fiber | null = null
+
+    /**
+     * If the old fiber and the new element have the same type, we can keep the
+     * DOM node and just update it with the new props
+     */
+    if (sameType) {
+      newFiber = {
+        type: oldFiber?.type || '',
+        props: element.props,
+        dom: oldFiber?.dom || null,
+        return: workInProgressFiber,
+        child: null,
+        sibling: null,
+        alternate: oldFiber,
+        effectTag: EffectTag.UPDATE
+      }
+    }
+
+    /**
+     * If the type is different and there is a new element, it means we need to
+     * create a new DOM node.
+     */
+    if (!sameType && element) {
+      newFiber = {
+        type: oldFiber?.type || '',
+        props: element.props,
+        dom: oldFiber?.dom || null,
+        return: workInProgressFiber,
+        child: null,
+        sibling: null,
+        alternate: null,
+        effectTag: EffectTag.PLACEMENT
+      }
+    }
+
+    /**
+     * If the types are different and there is an old fiber, we need to remove
+     * the old node
+     */
+    if (!sameType && oldFiber) {
+      oldFiber.effectTag = EffectTag.DELETION
+      deletions.push(oldFiber)
+    }
+
+    /***
+     * Here React also uses keys, that makes a better reconciliation. For
+     * examples, it detects when children change places in the element array.
+     */
+
+    // we add it to the fiber tree setting it either as a child or as a
+    // sibling, depending on whether it's the first child or not.
+    if (index === 0) {
+      workInProgressFiber.child = newFiber
+    } else {
+      prevSibling!.sibling = newFiber
+    }
+    prevSibling = newFiber
+    index++
+  }
+}
+
 // render and commit phases
+
+const isEventProp = (key: string) => /^on/.test(key)
+const isDomProp = (key: string) => key !== 'children' && !isEventProp(key)
+const isNew = (
+  prev: Record<string, unknown>,
+  next: Record<string, unknown>
+) => (key: string) => prev[key] !== next[key]
+const isGone = (next: Record<string, unknown>) => (key: string) =>
+  !Object.prototype.hasOwnProperty.call(next, key)
+function updateDom(
+  dom: HTMLElement,
+  prevProps: Record<string, unknown>,
+  nextProps: Record<string, unknown>
+) {
+  // remove old or changed event listeners
+  Object.keys(prevProps)
+    .filter(isEventProp)
+    .filter(
+      (key) =>
+        !Object.prototype.hasOwnProperty.call(nextProps, key) ||
+        isNew(prevProps, nextProps)
+    )
+    .forEach((name) => {
+      dom.removeEventListener(
+        (name as keyof HTMLElementEventMap).toLowerCase().slice(2),
+        prevProps[name] as EventListenerOrEventListenerObject
+      )
+    })
+
+  // add event listeners
+  Object.keys(nextProps)
+    .filter(isEventProp)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      dom.addEventListener(
+        (name as keyof HTMLElementEventMap).toLowerCase().slice(2),
+        nextProps[name] as EventListenerOrEventListenerObject
+      )
+    })
+
+  // remove old properties
+  Object.keys(prevProps)
+    .filter(isDomProp)
+    .filter(isGone(nextProps))
+    .forEach((name) => (dom as any)[name] === '')
+
+  // set new or changed properties
+  Object.keys(nextProps)
+    .filter(isDomProp)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => ((dom as any)[name] = nextProps[name]))
+}
 
 /**
  * recursively append all the nodes to the dom
@@ -198,6 +319,7 @@ function commitFiberRoot() {
   if (!workInProgressRoot) {
     return
   }
+  deletions.forEach(commitWork)
   commitWork(workInProgressRoot.child)
   workInProgressRoot = null
 }
@@ -207,7 +329,13 @@ function commitWork(fiber: Fiber | null) {
     return
   }
   const domParent = fiber.return?.dom
-  domParent?.appendChild(fiber.dom!)
+  if (fiber.effectTag === EffectTag.PLACEMENT && fiber.dom !== null) {
+    domParent?.appendChild(fiber.dom)
+  } else if (fiber.effectTag === EffectTag.UPDATE && fiber.dom !== null) {
+    updateDom(fiber.dom, fiber.alternate?.props || {}, fiber.props)
+  } else if (fiber.effectTag === EffectTag.DELETION) {
+    domParent?.removeChild(fiber.dom!)
+  }
   commitWork(fiber.child)
   commitWork(fiber.sibling)
 }
