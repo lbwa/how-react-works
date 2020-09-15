@@ -5,8 +5,17 @@ declare module React {
   }
 }
 
+/**
+ * A Fiber is work on a Component that needs to be done or was done. There can
+ * be more than one per component
+ * @see https://github.com/facebook/react/blob/v16.13.1/packages/react-reconciler/src/ReactFiber.js#L126-L257
+ */
 interface Fiber {
-  type: string
+  /**
+   * The resolved function/class associated with this fiber
+   * @see https://github.com/facebook/react/blob/v16.13.1/packages/react-reconciler/src/ReactFiber.js#L149-L150
+   */
+  type: string | Function
   /**
    * parent fiber
    */
@@ -24,6 +33,9 @@ interface Fiber {
   effectTag?: EffectTag
 }
 
+/**
+ * @see https://github.com/facebook/react/blob/v16.13.1/packages/shared/ReactSideEffectTags.js
+ */
 enum EffectTag {
   UPDATE,
   PLACEMENT,
@@ -71,7 +83,7 @@ function createDom(fiber: Fiber) {
   const dom =
     fiber.type === 'TEXT_ELEMENT'
       ? document.createTextNode('')
-      : document.createElement(fiber.type)
+      : document.createElement(fiber.type as string)
 
   const isDomProperty = (key: string) => key !== 'children'
   Object.keys(fiber.props)
@@ -147,14 +159,22 @@ function workLoop(deadline: RequestIdleCallbackDeadline) {
 requestIdleCallback(workLoop)
 
 function performUnitWork(fiber: Fiber): Fiber | null {
-  // add dom node, we keep track of the DOM node in the fiber.dom property
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber)
+  /**
+   * Functional component are differences in two ways:
+   *    1. The fiber from a functional component doesn't have a DOM node
+   *    2. And the children come from running the function instead of getting
+   *    them directly from the props
+   * We check if the fiber type is a function, and depending on that we go to
+   * a different update function
+   */
+  const isFunctionalComponent = fiber.type instanceof Function
+  if (isFunctionalComponent) {
+    // In updateFunctionalComponent we run the function to get the children
+    updateFunctionalComponent(fiber)
+  } else {
+    // We get the children from props property
+    updateHostComponent(fiber)
   }
-
-  // for each child we create a new fiber(transform elements to fibers)
-  const elements = fiber.props.children
-  reconcileChildren(fiber, elements)
 
   // return next unit of work
   // finally we search for the next unit of work. We first try with the child,
@@ -170,6 +190,22 @@ function performUnitWork(fiber: Fiber): Fiber | null {
     nextFiber = nextFiber.return
   }
   return null
+}
+
+function updateHostComponent(fiber: Fiber) {
+  // add dom node, we keep track of the DOM node in the fiber.dom property
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber)
+  }
+  // for each child  we create a new fiber(transform element to fiber)
+  reconcileChildren(fiber, fiber.props.children)
+}
+
+function updateFunctionalComponent(fiber: Fiber) {
+  // we run the function to get the children rather than `props` property field
+  const children = [(fiber.type as Function)(fiber.props)]
+  // once we have the children, the reconciliation works in the same way
+  reconcileChildren(fiber, children)
 }
 
 /**
@@ -328,16 +364,29 @@ function commitWork(fiber: Fiber | null) {
   if (!fiber) {
     return
   }
-  const domParent = fiber.return?.dom
+  let domReturnFiber = fiber.return
+  // go up the fiber tree until we find a fiber with a DOM node.
+  while (!domReturnFiber?.dom) {
+    domReturnFiber = domReturnFiber?.return || null
+  }
+  const domParent = domReturnFiber.dom
   if (fiber.effectTag === EffectTag.PLACEMENT && fiber.dom !== null) {
-    domParent?.appendChild(fiber.dom)
+    domParent.appendChild(fiber.dom)
   } else if (fiber.effectTag === EffectTag.UPDATE && fiber.dom !== null) {
     updateDom(fiber.dom, fiber.alternate?.props || {}, fiber.props)
   } else if (fiber.effectTag === EffectTag.DELETION) {
-    domParent?.removeChild(fiber.dom!)
+    commitDeletion(fiber, domParent)
   }
   commitWork(fiber.child)
   commitWork(fiber.sibling)
+}
+
+function commitDeletion(fiber: Fiber, domParent: HTMLElement) {
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom)
+  } else if (fiber.child) {
+    commitDeletion(fiber.child, domParent)
+  }
 }
 
 // export
