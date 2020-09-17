@@ -4,8 +4,11 @@
   "description": "How react works",
   "main": "index.js",
   "scripts": {
+    "build": "webpack --progress --config dist/webpack.config.js",
     "watch": "tsc --watch -p tsconfig.json",
     "compile": "tsc -p tsconfig.json",
+    "prebuild": "tsc ./build/webpack.config.ts --outDir dist --esModuleInterop --module commonjs",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,sass,md}\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -25,9 +28,20 @@
     "typescript": "^4.0.2"
   },
   "devDependencies": {
+    "@babel/core": "^7.11.6",
+    "@babel/plugin-proposal-class-properties": "^7.10.4",
+    "@babel/plugin-proposal-optional-chaining": "^7.11.0",
+    "@babel/preset-typescript": "^7.10.4",
+    "@types/node": "^14.10.3",
+    "@types/webpack": "^4.41.22",
+    "babel-loader": "^8.1.0",
+    "fork-ts-checker-webpack-plugin": "^5.2.0",
+    "html-webpack-plugin": "^4.4.1",
     "husky": "^4.3.0",
     "lint-staged": "^10.3.0",
-    "prettier": "^2.1.1"
+    "prettier": "^2.1.1",
+    "webpack": "^4.44.1",
+    "webpack-cli": "^3.3.12"
   },
   "prettier": {
     "endOfLine": "lf",
@@ -43,7 +57,7 @@
     }
   },
   "lint-staged": {
-    "packages/**/*.{js,jsx,ts,tsx,json,css,scss,sass,md}": [
+    "**/*.{js,jsx,ts,tsx,json,css,scss,sass,md}": [
       "prettier --write"
     ]
   }

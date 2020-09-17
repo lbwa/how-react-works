@@ -1,0 +1,9 @@
+{
+  "presets": [
+    "@babel/typescript"
+  ],
+  "plugins": [
+    "@babel/proposal-optional-chaining",
+    "@babel/proposal-class-properties"
+  ]
+}
