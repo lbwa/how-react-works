@@ -2,6 +2,20 @@
 
 Only for education.
 
+## Usage
+
+- Development
+
+  ```bash
+  $ yarn start
+  ```
+
+- Production
+
+  ```bash
+  $ yarn build
+  ```
+
 ## Acknowledgement
 
 - [build your own react](https://pomb.us/build-your-own-react/)

@@ -239,7 +239,7 @@ function reconcileChildren(
      */
     if (sameType) {
       newFiber = {
-        type: oldFiber?.type || '',
+        type: oldFiber!.type,
         props: element.props,
         dom: oldFiber?.dom || null,
         return: workInProgressFiber,
@@ -256,7 +256,7 @@ function reconcileChildren(
      */
     if (!sameType && element) {
       newFiber = {
-        type: oldFiber?.type || '',
+        type: oldFiber?.type || 'span',
         props: element.props,
         dom: oldFiber?.dom || null,
         return: workInProgressFiber,
