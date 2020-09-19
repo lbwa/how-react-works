@@ -84,9 +84,28 @@ function createWebpackConfig(mode: WebpackMode): webpack.Configuration {
           <html>
             <head>
               <title>How react works</title>
+              <style>
+              html, body {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+              }
+              .title {
+                margin-top: 0;
+              }
+              .footer {
+                padding: 0.8em;
+                font-size: 12px;
+                text-align: center;
+              }
+              </style>
             </head>
             <body>
-              <div id="root"></div>
+              <h1 class="title">How react works</h1>
+              <div id="root">
+                <p>The following elements are rendered by client-side js codes: </p>
+              </div>
+              <footer class="footer">Copyright &copy; 2020 <a href="https://github.com/lbwa" target="_blank" rel="noopener noreferrer">Liu Bowen</a></footer>
             </body>
           </html>
         `,
