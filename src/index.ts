@@ -15,7 +15,7 @@ interface Fiber {
    * The resolved function/class associated with this fiber
    * @see https://github.com/facebook/react/blob/v16.13.1/packages/react-reconciler/src/ReactFiber.js#L149-L150
    */
-  type: string | Function
+  type: string | Function | null
   /**
    * parent fiber
    */
@@ -42,15 +42,22 @@ enum EffectTag {
   DELETION
 }
 
+// helper
+
 function isObject(val: unknown): val is object {
   return typeof val === 'object'
 }
+
+function hasOwnProp<V>(obj: V, key: string) {
+  return Object.prototype.hasOwnProperty.call(obj, key)
+}
+
+//===================================== core ===================================
 
 function createElement(
   type: keyof HTMLElementTagNameMap,
   props: Record<string, any> | null,
   // The children array could also contain primitive values like strings or numbers
-
   ...children: (React.Element | string | number | boolean)[]
 ) {
   return {
@@ -80,23 +87,20 @@ function createTextElement(text: string | number | boolean) {
 // Fiber
 
 function createDom(fiber: Fiber) {
-  const dom =
-    fiber.type === 'TEXT_ELEMENT'
-      ? document.createTextNode('')
-      : document.createElement(fiber.type as string)
+  const dom = (fiber.type === 'TEXT_ELEMENT'
+    ? document.createTextNode('')
+    : document.createElement(fiber.type as string)) as HTMLElement
 
-  const isDomProperty = (key: string) => key !== 'children'
-  Object.keys(fiber.props)
-    .filter(isDomProperty)
-    .forEach((prop) => ((dom as any)[prop] = fiber.props[prop]))
+  updateDom(dom, {}, fiber.props)
 
-  return dom as HTMLElement
+  return dom
 }
 
 // In the render function we set nextUnitOfWork to the root of the fiber tree
 function render(element: React.Element, container: HTMLElement) {
+  deletions = []
   workInProgressRoot = nextUnitOfWork = {
-    type: '',
+    type: null,
     return: null,
     child: null,
     sibling: null,
@@ -106,7 +110,6 @@ function render(element: React.Element, container: HTMLElement) {
     },
     alternate: currentRoot
   }
-  deletions = []
 }
 
 // Concurrent mode
@@ -230,7 +233,9 @@ function reconcileChildren(
      * The element is the thing we want to render to the DOM
      */
     const element = elements[index]
-    const sameType = oldFiber && element && element.type === oldFiber.type
+    const sameType = Boolean(
+      oldFiber && element && element.type === oldFiber.type
+    )
     let newFiber: Fiber | null = null
 
     /**
@@ -256,9 +261,9 @@ function reconcileChildren(
      */
     if (!sameType && element) {
       newFiber = {
-        type: oldFiber?.type || 'span',
+        type: element.type,
         props: element.props,
-        dom: oldFiber?.dom || null,
+        dom: null,
         return: workInProgressFiber,
         child: null,
         sibling: null,
@@ -302,7 +307,7 @@ const isNew = (
   next: Record<string, unknown>
 ) => (key: string) => prev[key] !== next[key]
 const isGone = (next: Record<string, unknown>) => (key: string) =>
-  !Object.prototype.hasOwnProperty.call(next, key)
+  !hasOwnProp(next, key)
 function updateDom(
   dom: HTMLElement,
   prevProps: Record<string, unknown>,
@@ -312,33 +317,31 @@ function updateDom(
   Object.keys(prevProps)
     .filter(isEventProp)
     .filter(
-      (key) =>
-        !Object.prototype.hasOwnProperty.call(nextProps, key) ||
-        isNew(prevProps, nextProps)
+      (key) => !hasOwnProp(nextProps, key) || isNew(prevProps, nextProps)(key)
     )
-    .forEach((name) => {
+    .forEach((name) =>
       dom.removeEventListener(
         (name as keyof HTMLElementEventMap).toLowerCase().slice(2),
         prevProps[name] as EventListenerOrEventListenerObject
       )
-    })
-
-  // add event listeners
-  Object.keys(nextProps)
-    .filter(isEventProp)
-    .filter(isNew(prevProps, nextProps))
-    .forEach((name) => {
-      dom.addEventListener(
-        (name as keyof HTMLElementEventMap).toLowerCase().slice(2),
-        nextProps[name] as EventListenerOrEventListenerObject
-      )
-    })
+    )
 
   // remove old properties
   Object.keys(prevProps)
     .filter(isDomProp)
     .filter(isGone(nextProps))
-    .forEach((name) => (dom as any)[name] === '')
+    .forEach((name) => hasOwnProp(dom, name) && ((dom as any)[name] = ''))
+
+  // add event listeners
+  Object.keys(nextProps)
+    .filter(isEventProp)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) =>
+      dom.addEventListener(
+        (name as keyof HTMLElementEventMap).toLowerCase().slice(2),
+        nextProps[name] as EventListenerOrEventListenerObject
+      )
+    )
 
   // set new or changed properties
   Object.keys(nextProps)
@@ -357,6 +360,7 @@ function commitFiberRoot() {
   }
   deletions.forEach(commitWork)
   commitWork(workInProgressRoot.child)
+  currentRoot = workInProgressRoot
   workInProgressRoot = null
 }
 
@@ -398,8 +402,21 @@ class React {
 
 const element = React.createElement(
   'div',
-  { id: 'root' },
-  React.createElement('a', null, 'anchor'),
+  {
+    className: 'application',
+    onClick: function () {
+      console.info("I'm clicked !")
+    }
+  },
+  React.createElement(
+    'a',
+    {
+      href: 'https://github.com/lbwa/how-react-works',
+      target: '_blank',
+      rel: 'noopener noreferrer'
+    },
+    'anchor element'
+  ),
   React.createElement('p', null, 'paragraph')
 )
 React.render(element, document.getElementById('root')!)
