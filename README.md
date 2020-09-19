@@ -1,5 +1,9 @@
 <h1 align="center">How react works</h1>
 
+<p align="center">
+  <img src="https://github.com/lbwa/how-react-works/workflows/Deployment/badge.svg" alt="github actions"/>
+</p>
+
 Only for education.
 
 ## Usage
