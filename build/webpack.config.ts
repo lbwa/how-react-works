@@ -131,7 +131,8 @@ function createWebpackConfig(mode: WebpackMode): webpack.Configuration {
             hot: true,
             port: 9000,
             open: true,
-            overlay: true
+            overlay: true,
+            stats: 'minimal'
           }
         }
       : {})
