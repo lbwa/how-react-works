@@ -20,7 +20,7 @@ function createWebpackConfig(mode: WebpackMode): webpack.Configuration {
     target: 'web',
 
     entry: {
-      main: resolveApp('src/index.ts')
+      main: resolveApp('src/index.tsx')
     },
 
     output: {

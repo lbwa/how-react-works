@@ -5,6 +5,16 @@ declare module React {
   }
 }
 
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      div: Partial<HTMLDivElement>
+      a: Partial<HTMLAnchorElement>
+      p: Partial<HTMLParagraphElement>
+    }
+  }
+}
+
 /**
  * A Fiber is work on a Component that needs to be done or was done. There can
  * be more than one per component
@@ -400,23 +410,25 @@ class React {
   static render = render
 }
 
-const element = React.createElement(
-  'div',
-  {
-    className: 'application',
-    onClick: function () {
-      console.info("I'm clicked !")
-    }
-  },
-  React.createElement(
-    'a',
-    {
-      href: 'https://github.com/lbwa/how-react-works',
-      target: '_blank',
-      rel: 'noopener noreferrer'
-    },
-    'anchor element'
-  ),
-  React.createElement('p', null, 'paragraph')
-)
-React.render(element, document.getElementById('root')!)
+function App() {
+  return (
+    <div
+      className="jsx-application"
+      onclick={function () {
+        console.info(`I'm clicked!`)
+      }}
+    >
+      <a
+        href="https://github.com/lbwa/how-react-works"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        github repo
+      </a>
+      <p>paragraph element</p>
+    </div>
+  )
+}
+React.render(<App />, document.getElementById('root')!)
+
+export {}
